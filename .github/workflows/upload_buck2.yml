@@ -122,6 +122,60 @@ jobs:
           mkdir artifacts
           zstd -z ${{ steps.set_variables.outputs.buck2_out }} -o ${{ steps.set_variables.outputs.buck2_zst }}
           zstd -z ${{ steps.set_variables.outputs.buck2_rust_project_out }} -o ${{ steps.set_variables.outputs.buck2_rust_project_zst }}
+
+      - name: Capture buck2 version information
+        shell: bash
+        run: |
+          # Create a JSON file with version information
+          mkdir -p artifacts
+
+          # Run buck2 --version and capture output
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            # Windows path
+            VERSION_OUTPUT=$("${{ steps.set_variables.outputs.buck2_out }}" --version 2>&1)
+          else
+            # Linux/macOS path
+            VERSION_OUTPUT=$("${{ steps.set_variables.outputs.buck2_out }}" --version 2>&1)
+          fi
+
+          # Create JSON file with version info
+          cat > artifacts/version_info.json << EOF
+          {
+            "platform": "${{ matrix.target.triple }}",
+            "build_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "version_output": $(echo "$VERSION_OUTPUT" | jq -R -s '.')
+          }
+          EOF
+
+      - name: Generate hashes for binaries
+        shell: bash
+        run: |
+          cd artifacts
+          echo "# Buck2 Binary Hashes" > hashes.md
+          echo "Generated on $(date -u)" >> hashes.md
+          echo "" >> hashes.md
+          echo "## SHA-256 Hashes" >> hashes.md
+          echo "" >> hashes.md
+          echo "| File | SHA-256 Hash |" >> hashes.md
+          echo "|------|-------------|" >> hashes.md
+
+          # Use different hash commands based on OS
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            # Windows uses CertUtil for hashing
+            for file in *.zst; do
+              # CertUtil outputs multiple lines, we need to extract just the hash
+              hash=$(certutil -hashfile "$file" SHA256 | grep -v "CertUtil" | grep -v "^$" | tr -d " \t\r\n")
+              echo "| $file | $hash |" >> hashes.md
+            done
+          else
+            # Linux and macOS use sha256sum
+            for file in *.zst; do
+              hash=$(sha256sum "$file" | awk '{print $1}')
+              echo "| $file | $hash |" >> hashes.md
+            done
+          fi
+          echo "" >> hashes.md
+
       - name: Upload
         uses: actions/upload-artifact@v4
         with:

@@ -26,6 +26,54 @@ runs:
       shell: bash
       run: |
         ls -R artifacts
+
+    - name: Consolidate version information
+      shell: bash
+      run: |
+        # Create a JSON file with consolidated version information
+        echo '{' > ${{github.workspace}}/consolidated_versions.json
+        echo '  "release_tag": "${{ inputs.tag }}",' >> ${{github.workspace}}/consolidated_versions.json
+        echo '  "generated_at": "'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'",' >> ${{github.workspace}}/consolidated_versions.json
+        echo '  "platforms": [' >> ${{github.workspace}}/consolidated_versions.json
+
+        # Find all version_info.json files and consolidate them
+        FIRST=true
+        find ${{github.workspace}}/artifacts -name "version_info.json" | sort | while read version_file; do
+          if [ "$FIRST" = true ]; then
+            FIRST=false
+          else
+            echo ',' >> ${{github.workspace}}/consolidated_versions.json
+          fi
+          # Extract the content without the outer braces
+          cat "$version_file" | sed '1d;$d' | sed 's/^  /    /' >> ${{github.workspace}}/consolidated_versions.json
+        done
+
+        echo '  ]' >> ${{github.workspace}}/consolidated_versions.json
+        echo '}' >> ${{github.workspace}}/consolidated_versions.json
+
+        # Also create a human-readable markdown version for the release notes
+        echo "# Buck2 Version Information - Release ${{ inputs.tag }}" > ${{github.workspace}}/versions_summary.md
+        echo "Generated on $(date -u)" >> ${{github.workspace}}/versions_summary.md
+        echo "" >> ${{github.workspace}}/versions_summary.md
+        echo "## Version Information by Platform" >> ${{github.workspace}}/versions_summary.md
+        echo "" >> ${{github.workspace}}/versions_summary.md
+
+        # Find all version_info.json files and add them to the markdown
+        find ${{github.workspace}}/artifacts -name "version_info.json" | sort | while read version_file; do
+          platform=$(jq -r '.platform' "$version_file")
+          version=$(jq -r '.version_output' "$version_file")
+
+          echo "### Platform: $platform" >> ${{github.workspace}}/versions_summary.md
+          echo "" >> ${{github.workspace}}/versions_summary.md
+          echo '```' >> ${{github.workspace}}/versions_summary.md
+          echo "$version" >> ${{github.workspace}}/versions_summary.md
+          echo '```' >> ${{github.workspace}}/versions_summary.md
+          echo "" >> ${{github.workspace}}/versions_summary.md
+        done
+
+        # Copy the consolidated files to artifacts directory
+        cp ${{github.workspace}}/consolidated_versions.json ${{github.workspace}}/artifacts/
+        cp ${{github.workspace}}/versions_summary.md ${{github.workspace}}/artifacts/
     - uses: pyTooling/Actions/releaser@adef08d3bdef092282614f3b683897cefae82ee3 # v0.4.6
       id: upload_attempt_1
       with:
@@ -53,4 +101,12 @@ runs:
         # `${{ inputs.tag }}` Release Complete! :rocket:
         For the public download links of these build artifacts, please see:
           <https://github.com/$GITHUB_REPOSITORY/releases/tag/${{ inputs.tag }}>
+
+        ## Release Information
+        - Version information for all platforms is available in:
+          - JSON format: \`consolidated_versions.json\` (machine-readable)
+          - Markdown format: \`versions_summary.md\` (human-readable)
+        - SHA-256 hashes for all binaries are available in \`consolidated_hashes.md\` (if present)
+
+        Always verify the integrity of downloaded binaries before use.
         EOF
