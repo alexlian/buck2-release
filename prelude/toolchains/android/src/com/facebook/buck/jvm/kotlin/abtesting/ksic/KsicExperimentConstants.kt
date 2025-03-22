@@ -7,8 +7,7 @@
  * of this source tree.
  */
 
-package com.facebook.buck.jvm.kotlin.cd.scribe
+package com.facebook.buck.jvm.kotlin.abtesting.ksic
 
-interface KotlinCDScribeLogger {
-  fun log(logEntry: KotlinCDLogEntry): Boolean
-}
+const val UNIVERSE_NAME: String = "ksic_universe"
+const val PARAM_KSIC_ENABLED: String = "ksic_enabled"

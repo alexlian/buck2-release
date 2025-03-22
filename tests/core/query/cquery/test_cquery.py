@@ -265,3 +265,13 @@ async def test_disabling_of_execution_platforms(buck: Buck) -> None:
         query = "deps(set(tests/...))"
         await buck.cquery(query)
         await buck.cquery(query, "-c", "build.execution_platforms=")
+
+
+@buck_test(data_dir="deps_query")
+async def test_declared_deps_query(buck: Buck) -> None:
+    await expect_failure(
+        buck.cquery(
+            "root//:declared_deps",
+        ),
+        stderr_regex="Invalid target pattern `\\$declared_deps` is not allowed",
+    )

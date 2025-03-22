@@ -21,7 +21,8 @@ from buck2.tests.e2e_util.buck_workspace import buck_test
 async def test_incompatible_target_skipping(buck: Buck) -> None:
     # incompatible target should be skipped when a package
     result = await buck.build("//:")
-    assert "Skipping target incompatible node `root//:incompatible (" in result.stderr
+    assert "Skipped 1 incompatible targets:" in result.stderr
+    assert "root//:incompatible (" in result.stderr
     # when explicitly requested, it should be a failure
     await expect_failure(buck.build("//:incompatible"))
     # should be a failure if it's both explicitly requested and part of a package/recursive pattern
@@ -156,6 +157,24 @@ async def test_dep_only_incompatible_custom_soft_errors(buck: Buck) -> None:
     await buck.cquery("//dep_incompatible:dep_incompatible", *args)
     result = await buck.log("show")
     assert "Soft Error: soft_error_one" in result.stdout
+
+    await buck.cquery("//dep_incompatible:transitive_dep_incompatible", *args)
+    result = await buck.log("show")
+    assert "Soft Error: soft_error_two" in result.stdout
+
+
+@buck_test(allow_soft_errors=True)
+async def test_dep_only_incompatible_custom_soft_errors_with_exclusions(
+    buck: Buck,
+) -> None:
+    args = [
+        "-c",
+        "buck2.dep_only_incompatible_info=//dep_incompatible/dep_only_incompatible_info:dep_only_incompatible_info_with_exclusions",
+    ]
+    await buck.cquery("//dep_incompatible:dep_incompatible", *args)
+    result = await buck.log("show")
+    assert "Soft Error: soft_error_one" in result.stdout
+    assert "Soft Error: soft_error_three" in result.stdout
 
     await buck.cquery("//dep_incompatible:transitive_dep_incompatible", *args)
     result = await buck.log("show")

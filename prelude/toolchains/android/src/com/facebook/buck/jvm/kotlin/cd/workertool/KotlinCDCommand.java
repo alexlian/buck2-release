@@ -27,8 +27,8 @@ import com.facebook.buck.jvm.java.ActionMetadata;
 import com.facebook.buck.jvm.kotlin.KotlinStepsBuilder;
 import com.facebook.buck.jvm.kotlin.cd.analytics.KotlinCDAnalytics;
 import com.facebook.buck.jvm.kotlin.cd.analytics.KotlinCDNoopAnalytics;
-import com.facebook.buck.jvm.kotlin.cd.analytics.scribe.KotlinCDScribeAnalytics;
-import com.facebook.buck.jvm.kotlin.cd.scribe.LoggerCatKotlinCDScribeLogger;
+import com.facebook.buck.jvm.kotlin.cd.analytics.logger.KotlinCDLoggerAnalytics;
+import com.facebook.buck.jvm.kotlin.cd.logger.KotlinCDLogger;
 import com.facebook.buck.jvm.kotlin.cd.workertool.postexecutors.ClassAbiWriter;
 import com.facebook.buck.jvm.kotlin.cd.workertool.postexecutors.PostExecutorsFactory;
 import com.facebook.buck.jvm.kotlin.cd.workertool.postexecutors.PreviousStateWriter;
@@ -189,8 +189,8 @@ public class KotlinCDCommand implements JvmCDCommand {
       String target = parts[0];
       String subtarget = parts.length > 1 ? parts[1] : "library";
 
-      return new KotlinCDScribeAnalytics(
-          LoggerCatKotlinCDScribeLogger.INSTANCE,
+      return new KotlinCDLoggerAnalytics(
+          KotlinCDLogger.loadImplementation(),
           buildUuid,
           target,
           subtarget,

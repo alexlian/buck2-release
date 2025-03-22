@@ -35,20 +35,66 @@ pub enum Tier {
     Tier0,
 }
 
+struct TagMetadata {
+    category: Option<Tier>,
+    rank: u32,
+    // If true and an error includes non-generic tags,
+    // generic tags will be excluded from category key.
+    generic: bool,
+    // Hidden tags are only used to determine category,
+    // they are excluded from both category keys and error_tags
+    // reported externally.
+    // These should be removed/avoided if possible.
+    hidden: bool,
+}
+
+impl TagMetadata {
+    fn generic(self, generic: bool) -> Self {
+        Self { generic, ..self }
+    }
+
+    fn hidden(self) -> Self {
+        Self {
+            hidden: true,
+            ..self
+        }
+    }
+}
+
 macro_rules! rank {
     ( $tier:ident ) => {
         match stringify!($tier) {
-            "environment" => (Some(Tier::Environment), line!()),
-            "tier0" => (Some(Tier::Tier0), line!()),
-            "input" => (Some(Tier::Input), line!()),
-            "unspecified" => (None, line!()),
+            "environment" => TagMetadata {
+                category: Some(Tier::Environment),
+                rank: line!(),
+                generic: false,
+                hidden: false,
+            },
+            "tier0" => TagMetadata {
+                category: Some(Tier::Tier0),
+                rank: line!(),
+                generic: false,
+                hidden: false,
+            },
+            "input" => TagMetadata {
+                category: Some(Tier::Input),
+                rank: line!(),
+                generic: false,
+                hidden: false,
+            },
+            "unspecified" => TagMetadata {
+                category: None,
+                rank: line!(),
+                generic: true,
+                hidden: false,
+            },
             _ => unreachable!(),
         }
     };
 }
 
 /// Ordering determines tag rank, more interesting tags first
-pub(crate) fn category_and_rank(tag: ErrorTag) -> (Option<Tier>, u32) {
+fn tag_metadata(tag: ErrorTag) -> TagMetadata {
     match tag {
         // Environment errors
         ErrorTag::NoValidCerts => rank!(environment),
@@ -64,7 +110,7 @@ pub(crate) fn category_and_rank(tag: ErrorTag) -> (Option<Tier>, u32) {
         ErrorTag::ServerStderrEmpty => rank!(environment),
         // Note: This is only true internally due to buckwrapper
         ErrorTag::NoBuckRoot => rank!(environment),
-        ErrorTag::InstallerEnvironment => rank!(environment),
+        ErrorTag::InstallerEnvironment => rank!(environment).hidden(),
         ErrorTag::IoNotConnected => rank!(environment), // This typically means eden is not mounted
 
         // Tier 0 errors
@@ -130,10 +176,10 @@ pub(crate) fn category_and_rank(tag: ErrorTag) -> (Option<Tier>, u32) {
         ErrorTag::DiceUnexpectedCycleGuardType => rank!(tier0),
         ErrorTag::DiceDuplicateActivationData => rank!(tier0),
         ErrorTag::InstallerUnknown => rank!(tier0),
-        ErrorTag::InstallerTier0 => rank!(tier0),
+        ErrorTag::InstallerTier0 => rank!(tier0).hidden(),
 
-        ErrorTag::Environment => rank!(environment),
-        ErrorTag::Tier0 => rank!(tier0),
+        ErrorTag::Environment => rank!(environment).hidden(),
+        ErrorTag::Tier0 => rank!(tier0).hidden(),
 
         // Input errors
         // FIXME(JakobDegen): Make this bad experience once that's available. Usually when this
@@ -165,23 +211,24 @@ pub(crate) fn category_and_rank(tag: ErrorTag) -> (Option<Tier>, u32) {
         ErrorTag::HttpClient => rank!(input),
         ErrorTag::TestDeadlineExpired => rank!(input),
         ErrorTag::Unimplemented => rank!(input),
-        ErrorTag::InstallerInput => rank!(input),
+        ErrorTag::InstallerInput => rank!(input).hidden(),
         ErrorTag::BuildDeadlineExpired => rank!(input),
 
-        ErrorTag::Input => rank!(input),
+        ErrorTag::Input => rank!(input).hidden(),
 
-        // Generic tags, these can represent:
+        // Tags with unspecified category, these can represent:
         // - Tags not specific enough to determine infra vs user categorization.
         // - Tags not specific enough to usefully disambiguate category keys.
         // - Something that isn't actually an error.
         // - A phase of the build.
+        // By default these are generic (excluded from category keys)
         ErrorTag::ClientGrpc => rank!(unspecified),
         ErrorTag::IoBrokenPipe => rank!(unspecified),
         ErrorTag::IoWindowsSharingViolation => rank!(unspecified),
         ErrorTag::IoNotFound => rank!(unspecified),
         ErrorTag::IoSource => rank!(unspecified),
         ErrorTag::IoSystem => rank!(unspecified),
-        ErrorTag::IoEden => rank!(unspecified),
+        ErrorTag::IoEden => rank!(unspecified).generic(false),
         ErrorTag::IoEdenConnectionError => rank!(unspecified),
         ErrorTag::IoEdenRequestError => rank!(unspecified),
         ErrorTag::IoEdenUnknownField => rank!(unspecified),
@@ -205,23 +252,13 @@ pub(crate) fn category_and_rank(tag: ErrorTag) -> (Option<Tier>, u32) {
 
 /// Errors can be categorized by tags only if they have any non-generic tags.
 pub fn tag_is_generic(tag: &ErrorTag) -> bool {
-    if tag_is_hidden(tag) {
-        return true;
-    }
-    category_and_rank(*tag).0.is_none()
+    let metadata = tag_metadata(*tag);
+    metadata.generic || metadata.hidden
 }
 
 /// Hidden tags only used internally, for categorization.
 pub fn tag_is_hidden(tag: &ErrorTag) -> bool {
-    match tag {
-        ErrorTag::Tier0 => true,
-        ErrorTag::Input => true,
-        ErrorTag::Environment => true,
-        ErrorTag::InstallerTier0 => true,
-        ErrorTag::InstallerInput => true,
-        ErrorTag::InstallerEnvironment => true,
-        _ => false,
-    }
+    tag_metadata(*tag).hidden
 }
 
 pub trait ErrorLike {
@@ -247,7 +284,7 @@ impl ErrorLike for buck2_data::ErrorReport {
 
     fn category(&self) -> Tier {
         self.best_tag()
-            .map(|t| category_and_rank(t).0)
+            .map(|t| tag_metadata(t).category)
             .flatten()
             .unwrap_or(Tier::Tier0)
     }
@@ -267,12 +304,12 @@ pub fn best_tag(tags: impl IntoIterator<Item = ErrorTag>) -> Option<ErrorTag> {
 
 /// Tag rank: smaller is more interesting.
 fn tag_rank(tag: ErrorTag) -> u32 {
-    category_and_rank(tag).1
+    tag_metadata(tag).rank
 }
 
 /// Some tags are known to be either infrastructure or user errors.
 pub(crate) fn error_tag_category(tag: ErrorTag) -> Option<Tier> {
-    category_and_rank(tag).0
+    tag_metadata(tag).category
 }
 
 #[derive(derive_more::Display, Debug, PartialEq)]

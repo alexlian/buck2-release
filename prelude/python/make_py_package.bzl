@@ -178,8 +178,7 @@ def make_py_package(
     )
 
     # Add link metadata to manifest_module_entries if requested.
-    manifest_module_entries = _maybe_add_dep_metadata_to_manifest_module(ctx, map(lambda s: s[1], shared_libraries), link_args)
-
+    manifest_module_entries = _add_dep_metadata_to_manifest_module(ctx, map(lambda s: s[1], shared_libraries), link_args)
     startup_function = generate_startup_function_loader(ctx, manifest_module_entries)
     manifest_module = generate_manifest_module(ctx, manifest_module_entries, python_toolchain, srcs)
     common_modules_args, dep_artifacts, debug_artifacts = _pex_modules_common_args(
@@ -390,6 +389,7 @@ def _make_py_package_impl(
             category = "par",
             identifier = identifier_prefix.format(output_suffix),
             allow_cache_upload = allow_cache_upload,
+            error_handler = python_toolchain.python_error_handler,
         )
 
     else:
@@ -725,7 +725,7 @@ def _hidden_resources_error_message(current_target: Label, hidden_resources: lis
         if rule != "":
             msg += "Hidden srcs/resources for {}\n".format(rule)
         else:
-            msg += "Source files:\n"
+            msg += "Debug instructions:\n"
             msg += "Find the reason this file was included with `buck2 cquery 'allpaths({}, owner(%s))' <file paths>`\n".format(current_target.raw_target())
         for resource in sorted(resources):
             msg += "  {}\n".format(resource)
@@ -771,23 +771,22 @@ def _get_shared_library_dep_metadata(
 
     return dedupe_dep_metadata(metadatas)
 
-def _maybe_add_dep_metadata_to_manifest_module(
+def _add_dep_metadata_to_manifest_module(
         ctx: AnalysisContext,
         shared_libraries: list[SharedLibrary],
         link_args: list[LinkArgs]) -> dict[str, typing.Any] | None:
     """
-    Possibly updates manifest_module_entries with link metadata if requested.
+    Updates manifest_module_entries with link metadata if they exist.
     """
     manifest_module_entries = ctx.attrs.manifest_module_entries
     if manifest_module_entries == None:
         return None
 
     metadatas = _get_shared_library_dep_metadata(ctx, shared_libraries, link_args)
-    if metadatas:
-        manifest_module_entries["library_versions"] = [
-            metadata.version
-            for metadata in truncate_dep_metadata(metadatas)
-        ]
+    manifest_module_entries["library_versions"] = [
+        metadata.version
+        for metadata in truncate_dep_metadata(metadatas)
+    ]
 
     return manifest_module_entries
 

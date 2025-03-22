@@ -7,15 +7,15 @@
  * of this source tree.
  */
 
-package com.facebook.buck.jvm.kotlin.cd.analytics.scribe
+package com.facebook.buck.jvm.kotlin.cd.analytics.logger
 
 import com.facebook.buck.jvm.cd.command.kotlin.LanguageVersion
 import com.facebook.buck.jvm.kotlin.cd.analytics.ClasspathChangesParam
 import com.facebook.buck.jvm.kotlin.cd.analytics.KotlinCDLoggingContext
 import com.facebook.buck.jvm.kotlin.cd.analytics.KotlincModeParam
 import com.facebook.buck.jvm.kotlin.cd.analytics.StepParam
-import com.facebook.buck.jvm.kotlin.cd.scribe.KotlinCDLogEntry
-import com.facebook.buck.jvm.kotlin.cd.scribe.KotlinCDScribeLogger
+import com.facebook.buck.jvm.kotlin.cd.logger.KotlinCDLogger
+import com.facebook.buck.jvm.kotlin.cd.logger.model.KotlinCDLogEntry
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -26,9 +26,9 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 
-internal class KotlinCDScribeAnalyticsTest {
+internal class KotlinCDLoggerAnalyticsTest {
 
-  private val kotlinCDScribeLogger: KotlinCDScribeLogger = mock()
+  private val kotlinCDLogger: KotlinCDLogger = mock()
 
   private val clock = Clock.fixed(Instant.parse("2018-08-22T10:00:00Z"), ZoneOffset.UTC)
 
@@ -37,7 +37,7 @@ internal class KotlinCDScribeAnalyticsTest {
     val kotlinCDAnalytics = createFakeKotlinCDAnalytics(buildUuid = null)
     kotlinCDAnalytics.log(createKotlinCDLoggingContext())
 
-    verify(kotlinCDScribeLogger, never()).log(any())
+    verify(kotlinCDLogger, never()).log(any())
   }
 
   @Test
@@ -45,7 +45,7 @@ internal class KotlinCDScribeAnalyticsTest {
     val kotlinCDAnalytics = createFakeKotlinCDAnalytics()
     kotlinCDAnalytics.log(createKotlinCDLoggingContext())
 
-    verify(kotlinCDScribeLogger, times(1)).log(any())
+    verify(kotlinCDLogger, times(1)).log(any())
   }
 
   @Test
@@ -55,7 +55,7 @@ internal class KotlinCDScribeAnalyticsTest {
 
     kotlinCDAnalytics.log(createKotlinCDLoggingContext(languageVersion = "2.0"))
 
-    verify(kotlinCDScribeLogger, times(1)).log(expectedEntry)
+    verify(kotlinCDLogger, times(1)).log(expectedEntry)
   }
 
   @Test
@@ -65,7 +65,7 @@ internal class KotlinCDScribeAnalyticsTest {
 
     kotlinCDAnalytics.log(createKotlinCDLoggingContext(languageVersion = "2.0.0"))
 
-    verify(kotlinCDScribeLogger, times(1)).log(expectedEntry)
+    verify(kotlinCDLogger, times(1)).log(expectedEntry)
   }
 
   @Test(expected = IllegalArgumentException::class)
@@ -83,7 +83,7 @@ internal class KotlinCDScribeAnalyticsTest {
     kotlinCDAnalytics.log(
         createKotlinCDLoggingContext(extras = mapOf("testKey" to listOf("testValue"))))
 
-    verify(kotlinCDScribeLogger, times(1)).log(expectedEntry)
+    verify(kotlinCDLogger, times(1)).log(expectedEntry)
   }
 
   @Test
@@ -96,7 +96,7 @@ internal class KotlinCDScribeAnalyticsTest {
         createKotlinCDLoggingContext(
             extras = mapOf("testKey" to listOf("testValue1", "testValue2"))))
 
-    verify(kotlinCDScribeLogger, times(1)).log(expectedEntry)
+    verify(kotlinCDLogger, times(1)).log(expectedEntry)
   }
 
   @Test
@@ -114,7 +114,7 @@ internal class KotlinCDScribeAnalyticsTest {
                     "testKey1" to listOf("testValue1", "testValue2"),
                     "testKey2" to listOf("testValue3", "testValue4"))))
 
-    verify(kotlinCDScribeLogger, times(1)).log(expectedEntry)
+    verify(kotlinCDLogger, times(1)).log(expectedEntry)
   }
 
   private fun createKotlinCDLoggingContext(
@@ -130,8 +130,8 @@ internal class KotlinCDScribeAnalyticsTest {
   }
 
   private fun createFakeKotlinCDAnalytics(buildUuid: String? = DEFAULT_BUILDUUID) =
-      KotlinCDScribeAnalytics(
-          kotlinCDScribeLogger = kotlinCDScribeLogger,
+      KotlinCDLoggerAnalytics(
+          kotlinCDLogger = kotlinCDLogger,
           buildUuid = buildUuid,
           target = TARGET,
           subtarget = SUBTARGET,

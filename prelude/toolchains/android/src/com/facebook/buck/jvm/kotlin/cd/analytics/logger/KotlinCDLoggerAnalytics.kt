@@ -7,22 +7,22 @@
  * of this source tree.
  */
 
-package com.facebook.buck.jvm.kotlin.cd.analytics.scribe
+package com.facebook.buck.jvm.kotlin.cd.analytics.logger
 
 import com.facebook.buck.core.util.log.Logger
 import com.facebook.buck.jvm.cd.command.kotlin.LanguageVersionForLogs
 import com.facebook.buck.jvm.kotlin.cd.analytics.KotlinCDAnalytics
 import com.facebook.buck.jvm.kotlin.cd.analytics.KotlinCDLoggingContext
-import com.facebook.buck.jvm.kotlin.cd.scribe.KotlinCDLogEntry
-import com.facebook.buck.jvm.kotlin.cd.scribe.KotlinCDScribeLogger
+import com.facebook.buck.jvm.kotlin.cd.logger.KotlinCDLogger
+import com.facebook.buck.jvm.kotlin.cd.logger.model.KotlinCDLogEntry
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
-class KotlinCDScribeAnalytics
+class KotlinCDLoggerAnalytics
 @JvmOverloads
 constructor(
-    private val kotlinCDScribeLogger: KotlinCDScribeLogger,
+    private val kotlinCDLogger: KotlinCDLogger,
     private val buildUuid: String?,
     private val target: String,
     private val subtarget: String,
@@ -41,7 +41,7 @@ constructor(
     }
 
     val start = Instant.now(clock)
-    val success: Boolean = kotlinCDScribeLogger.log(createKotlinCDLogEntry(context))
+    val success: Boolean = kotlinCDLogger.log(createKotlinCDLogEntry(context))
     val end = Instant.now(clock)
 
     val duration = Duration.between(start, end)
@@ -86,6 +86,6 @@ constructor(
   }
 
   companion object {
-    private val LOG: Logger = Logger.get(KotlinCDScribeAnalytics::class.java)
+    private val LOG: Logger = Logger.get(KotlinCDLoggerAnalytics::class.java)
   }
 }
