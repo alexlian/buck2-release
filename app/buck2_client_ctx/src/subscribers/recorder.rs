@@ -42,6 +42,7 @@ use buck2_error::classify::source_area;
 use buck2_error::classify::ErrorLike;
 use buck2_error::classify::ERROR_TAG_UNCLASSIFIED;
 use buck2_error::internal_error;
+use buck2_error::source_location::SourceLocation;
 use buck2_error::BuckErrorContext;
 use buck2_error::Tier;
 use buck2_event_log::ttl::manifold_event_log_ttl;
@@ -49,7 +50,6 @@ use buck2_event_observer::action_stats;
 use buck2_event_observer::cache_hit_rate::total_cache_hit_rate;
 use buck2_event_observer::last_command_execution_kind;
 use buck2_event_observer::last_command_execution_kind::LastCommandExecutionKind;
-use buck2_events::errors::create_error_report;
 use buck2_events::sink::remote::new_remote_event_sink_if_enabled;
 use buck2_events::sink::remote::ScribeConfig;
 use buck2_events::BuckEvent;
@@ -217,14 +217,6 @@ pub(crate) struct InvocationRecorder {
     file_watcher: Option<String>,
     health_check_tags_receiver: Option<Receiver<Vec<String>>>,
     health_check_tags: HashSet<String>,
-}
-
-struct ErrorsReport {
-    errors: Vec<ProcessedErrorReport>,
-    best_error_tag: Option<String>,
-    best_error_category_key: Option<String>,
-    best_error_source_area: Option<String>,
-    error_category: Option<String>,
 }
 
 impl InvocationRecorder {
@@ -422,7 +414,7 @@ impl InvocationRecorder {
         Ok(Default::default())
     }
 
-    fn finalize_errors(&mut self) -> ErrorsReport {
+    fn finalize_errors(&mut self) -> Vec<ProcessedErrorReport> {
         // Add stderr to GRPC connection errors if available
         let connection_errors: Vec<buck2_error::Error> = self
             .client_errors
@@ -455,36 +447,12 @@ impl InvocationRecorder {
             self.client_errors.push(error);
         }
 
-        let mut errors =
-            std::mem::take(&mut self.client_errors).into_map(|e| create_error_report(&e));
+        let mut errors = std::mem::take(&mut self.client_errors).into_map(|e| (&e).into());
         let command_errors = std::mem::take(&mut self.command_errors);
         errors.extend(command_errors);
         errors.sort_by_key(|e| e.error_rank());
 
-        let best_error = errors
-            .first()
-            .map(|error| process_error_report(error.clone()));
-        let (best_error_category_key, best_error_tag, error_category, best_error_source_area) =
-            if let Some(best_error) = best_error {
-                (
-                    best_error.category_key,
-                    best_error.best_tag,
-                    best_error.category,
-                    best_error.source_area,
-                )
-            } else {
-                (None, None, None, None)
-            };
-
-        let errors = errors.into_map(process_error_report);
-
-        ErrorsReport {
-            errors,
-            best_error_tag,
-            best_error_category_key,
-            error_category,
-            best_error_source_area,
-        }
+        errors.into_map(process_error_report)
     }
 
     fn create_record_event(&mut self) -> BuckEvent {
@@ -653,7 +621,7 @@ impl InvocationRecorder {
         let mut metadata = Self::default_metadata();
         metadata.strings.extend(std::mem::take(&mut self.metadata));
 
-        let errors_report = self.finalize_errors();
+        let errors = self.finalize_errors();
 
         let record = buck2_data::InvocationRecord {
             command_name: Some(self.command_name.to_owned()),
@@ -774,11 +742,7 @@ impl InvocationRecorder {
             daemon_was_started: self.daemon_was_started.map(|t| t as i32),
             should_restart: Some(self.should_restart),
             client_metadata: std::mem::take(&mut self.client_metadata),
-            errors: errors_report.errors,
-            best_error_tag: errors_report.best_error_tag,
-            best_error_category_key: errors_report.best_error_category_key,
-            best_error_source_area: errors_report.best_error_source_area,
-            error_category: errors_report.error_category,
+            errors,
             target_rule_type_names: std::mem::take(&mut self.target_rule_type_names),
             new_configs_used: Some(self.has_new_buckconfigs),
             re_max_download_speed: self
@@ -1685,18 +1649,24 @@ fn process_error_report(error: buck2_data::ErrorReport) -> buck2_data::Processed
         Tier::Environment => ENVIRONMENT.to_owned(),
         Tier::Input => INPUT.to_owned(),
     };
+    let tags = error
+        .tags
+        .iter()
+        .copied()
+        .filter_map(|v| buck2_data::error::ErrorTag::try_from(v).ok())
+        .map(|t| t.as_str_name().to_owned());
+
+    let string_tags = error.string_tags.iter().map(|t| t.tag.clone());
+    let tags = tags.chain(string_tags).collect();
+
     buck2_data::ProcessedErrorReport {
         tier: None,
         message: error.message,
         telemetry_message: error.telemetry_message,
-        source_location: error.source_location,
-        tags: error
-            .tags
-            .iter()
-            .copied()
-            .filter_map(|v| buck2_data::error::ErrorTag::try_from(v).ok())
-            .map(|t| t.as_str_name().to_owned())
-            .collect(),
+        source_location: error
+            .source_location
+            .map(|s| SourceLocation::from(s).to_string()),
+        tags,
         best_tag: Some(best_tag),
         sub_error_categories: error.sub_error_categories,
         category_key: error.category_key,
