@@ -108,6 +108,8 @@ jobs:
           else
             CARGO=cargo
           fi
+          export BUCK2_SET_EXPLICIT_VERSION=${{ github.sha }}
+          export BUCK2_RELEASE_TIMESTAMP="${{ github.event.repository.updated_at}}"
           $CARGO build --release --bin buck2 --bin rust-project --target ${{ matrix.target.triple }}
       - name: Sanity check with examples/with_prelude
         if: ${{ !matrix.target.cross }}
