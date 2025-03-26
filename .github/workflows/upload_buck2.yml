@@ -18,7 +18,7 @@ jobs:
 
           echo "buck2_version=$commit_date-${{ github.sha }}" >> "$GITHUB_ENV"
       - name: Display version info
-        run: echo $buck2_version
+        run: echo ${{ env.buck2_version }}
   
   get_prelude_hash:
     name: Get the latest prelude hash
@@ -109,6 +109,8 @@ jobs:
       - name: Build
         shell: bash
         env:
+          BUCK2_RELEASE_TIMESTAMP: ${{ github.event.repository.updated_at }}
+          BUCK2_SET_EXPLICIT_VERSION: ${{ env.buck2_version }}
           RUSTFLAGS: "-C strip=debuginfo -C codegen-units=1"
         run: |
           # aarch64-linux builds need JEMALLOC_SYS_WITH_LG_PAGE=16
@@ -122,10 +124,6 @@ jobs:
           else
             CARGO=cargo
           fi
-          # Specify the release version information
-          commit_date=$(echo "${{ github.event.repository.updated_at }}" | sed 's/T.*//')
-          export BUCK2_SET_EXPLICIT_VERSION="$commit_date-${{ github.sha }}"
-          export BUCK2_RELEASE_TIMESTAMP="${{ github.event.repository.updated_at }}"
           $CARGO build --release --bin buck2 --bin rust-project --target ${{ matrix.target.triple }}
       - name: Sanity check with examples/with_prelude
         if: ${{ !matrix.target.cross }}
