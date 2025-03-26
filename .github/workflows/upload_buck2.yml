@@ -6,6 +6,20 @@ on:
       - main
 
 jobs:
+  set_version_info:
+    name: Define the version info for this release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Define version info
+        id: define_version_info
+        run: |
+          # Specify the release version information
+          commit_date=$(echo "${{ github.event.repository.updated_at }}" | sed 's/T.*//')
+
+          echo "buck2_version=$commit_date-${{ github.sha }}" >> "$GITHUB_ENV"
+      - name: Display version info
+        run: echo $buck2_version
+  
   get_prelude_hash:
     name: Get the latest prelude hash
     runs-on: ubuntu-latest
